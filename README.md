@@ -3,6 +3,13 @@ FlapPyBird
 
 A Flappy Bird Clone made using [python-pygame][pygame]
 
+Will add multiplayer support
+
+Contributers:
+Mohamed Abdelrehim
+Yasmine Medhat
+Loujaina Ragheb
+
 How-to (as tested on MacOS)
 ---------------------------
 
