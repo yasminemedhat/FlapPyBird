@@ -5,6 +5,8 @@ from distutils.core import setup
 import py2exe
 
 origIsSystemDLL = py2exe.build_exe.isSystemDLL
+
+
 def isSystemDLL(pathname):
     dlls = ("libfreetype-6.dll", "libogg-0.dll", "sdl_ttf.dll")
     if os.path.basename(pathname).lower() in dlls:
@@ -17,7 +19,7 @@ sys.argv.append('py2exe')
 setup(
     name =    'Flappy Bird',
     version = '1.0',
-    author =  'Sourabh Verma',
+    author =  'open',
     options = {
         'py2exe': {
             'bundle_files': 1, # doesn't work on win64
@@ -32,5 +34,5 @@ setup(
         ]
     }],
 
-    zipfile=None,
+    zipfile=None, requires=['py2exe', 'pygame']
 )
