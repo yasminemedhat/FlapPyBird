@@ -1,37 +1,38 @@
 from itertools import cycle
 import random
-import sys
 
 import pygame
 from pygame.locals import *
-import os
 import socket
 import sys
 from _thread import *
 import time
 from datetime import datetime
 
-
 HOST = ''
 SEND_PORT = 0
 RECV_PORT = 0
 ID = 0
 isServer = False
+
+# ToDo: Added
+someone_still_playing = True
+my_gameover = False
+
 broadcast_port = 8888
-player2_ip =0
-player2_send_port=0
+player2_ip = 0
+player2_send_port = 0
 player2_recv_port = 0
 player2_score = 0
 recv_score_socket = None
 send_score_socket = None
 FPS = 30
-SCREENWIDTH  = 288
+SCREENWIDTH = 288
 SCREENHEIGHT = 512
-PIPEGAPSIZE  = 100 # gap between upper and lower part of pipe
-BASEY        = SCREENHEIGHT * 0.79
+PIPEGAPSIZE = 100  # gap between upper and lower part of pipe
+BASEY = SCREENHEIGHT * 0.79
 # image, sound and hitmask  dicts
 IMAGES, SOUNDS, HITMASKS = {}, {}, {}
-
 # list of all possible players (tuple of 3 positions of flap)
 PLAYERS_LIST = (
     # red bird
@@ -66,7 +67,6 @@ PIPES_LIST = (
     'assets/sprites/pipe-red.png',
 )
 
-
 try:
     xrange
 except NameError:
@@ -100,10 +100,12 @@ def main():
     IMAGES['message'] = pygame.image.load('assets/sprites/message.png').convert_alpha()
     # base (ground) sprite
     IMAGES['base'] = pygame.image.load('assets/sprites/base.png').convert_alpha()
-    #winner sprite
-    #IMAGES['winner'] = pygame.image.load('assets/sprites/winner.png').convert_alpha()
-    #loser sprite
-    #IMAGES['loser'] = pygame.image.load('assets/sprites/loser.png').convert_alpha()
+    # winner sprite
+    IMAGES['winner'] = pygame.image.load('assets/sprites/winner.png').convert_alpha()
+    # loser sprite
+    IMAGES['loser'] = pygame.image.load('assets/sprites/loser.png').convert_alpha()
+    # tie sprite
+    IMAGES['tie'] = pygame.image.load('assets/sprites/tie.png').convert_alpha()
 
     # sounds
     if 'win' in sys.platform:
@@ -111,11 +113,11 @@ def main():
     else:
         soundExt = '.ogg'
 
-    SOUNDS['die']    = pygame.mixer.Sound('assets/audio/die' + soundExt)
-    SOUNDS['hit']    = pygame.mixer.Sound('assets/audio/hit' + soundExt)
-    SOUNDS['point']  = pygame.mixer.Sound('assets/audio/point' + soundExt)
+    SOUNDS['die'] = pygame.mixer.Sound('assets/audio/die' + soundExt)
+    SOUNDS['hit'] = pygame.mixer.Sound('assets/audio/hit' + soundExt)
+    SOUNDS['point'] = pygame.mixer.Sound('assets/audio/point' + soundExt)
     SOUNDS['swoosh'] = pygame.mixer.Sound('assets/audio/swoosh' + soundExt)
-    SOUNDS['wing']   = pygame.mixer.Sound('assets/audio/wing' + soundExt)
+    SOUNDS['wing'] = pygame.mixer.Sound('assets/audio/wing' + soundExt)
 
     while True:
         # select random background sprites
@@ -150,32 +152,34 @@ def main():
             getHitmask(IMAGES['player'][1]),
             getHitmask(IMAGES['player'][2]),
         )
-        
+
         global HOST
-        HOST = socket.gethostbyname(socket.gethostname())
-        #random generator that uses the timestamp
+        HOST = socket.gethostbyname_ex('')
+        HOST = HOST[-1][-1]
+        print(HOST)
+        # random generator that uses the timestamp
         random.seed(datetime.now())
-        #generate a random sending port number
+        # generate a random sending port number
         global SEND_PORT
-        SEND_PORT = random.randint(2**10,2**16)
+        SEND_PORT = random.randint(2 ** 10, 2 ** 16)
         print(SEND_PORT)
-        #generate a random receiving port number
+        # generate a random receiving port number
         global RECV_PORT
-        RECV_PORT = random.randint(2**10,2**16)
+        RECV_PORT = random.randint(2 ** 10, 2 ** 16)
         print(RECV_PORT)
-        #generate random player id
+        # generate random player id
         global ID
-        ID = random.randint(10,100)
-        
+        ID = random.randint(10, 100)
+
         movementInfo = showWelcomeAnimation()
         crashInfo = mainGame(movementInfo)
-        
+
         showGameOverScreen(crashInfo)
+
 
 def showWelcomeAnimation():
     """Shows welcome screen animation of flappy bird"""
-    
-    
+
     # index of player to blit on screen
     playerIndex = 0
     playerIndexGen = cycle([0, 1, 2, 1])
@@ -194,24 +198,22 @@ def showWelcomeAnimation():
 
     # player shm for up-down motion on welcome screen
     playerShmVals = {'val': 0, 'dir': 1}
-    
+
     Connect_to_second_player()
-    
-    
-    
+
     while True:
         for event in pygame.event.get():
             if event.type == QUIT or (event.type == KEYDOWN and event.key == K_ESCAPE):
                 pygame.quit()
                 sys.exit()
-            #if event.type == KEYDOWN and (event.key == K_SPACE or event.key == K_UP):
-                # make first flap sound and return values for mainGame
+            # if event.type == KEYDOWN and (event.key == K_SPACE or event.key == K_UP):
+            # make first flap sound and return values for mainGame
             SOUNDS['wing'].play()
             return {
-                    'playery': playery + playerShmVals['val'],
-                    'basex': basex,
-                    'playerIndexGen': playerIndexGen,
-                }
+                'playery': playery + playerShmVals['val'],
+                'basex': basex,
+                'playerIndexGen': playerIndexGen,
+            }
 
         # adjust playery, playerIndex, basex
         if (loopIter + 1) % 5 == 0:
@@ -221,7 +223,7 @@ def showWelcomeAnimation():
         playerShm(playerShmVals)
 
         # draw sprites
-        SCREEN.blit(IMAGES['background'], (0,0))
+        SCREEN.blit(IMAGES['background'], (0, 0))
         SCREEN.blit(IMAGES['player'][playerIndex],
                     (playerx, playery + playerShmVals['val']))
         SCREEN.blit(IMAGES['message'], (messagex, messagey))
@@ -232,6 +234,10 @@ def showWelcomeAnimation():
 
 
 def mainGame(movementInfo):
+
+    # ToDo Added
+    global someone_still_playing
+
     score = playerIndex = loopIter = 0
     playerIndexGen = movementInfo['playerIndexGen']
     playerx, playery = int(SCREENWIDTH * 0.2), movementInfo['playery']
@@ -258,16 +264,15 @@ def mainGame(movementInfo):
     pipeVelX = -4
 
     # player velocity, max velocity, downward accleration, accleration on flap
-    playerVelY    =  -9   # player's velocity along Y, default same as playerFlapped
-    playerMaxVelY =  10   # max vel along Y, max descend speed
-    playerMinVelY =  -8   # min vel along Y, max ascend speed
-    playerAccY    =   1   # players downward accleration
-    playerRot     =  45   # player's rotation
-    playerVelRot  =   3   # angular speed
-    playerRotThr  =  20   # rotation threshold
-    playerFlapAcc =  -9   # players speed on flapping
-    playerFlapped = False # True when player flaps
-
+    playerVelY = -9  # player's velocity along Y, default same as playerFlapped
+    playerMaxVelY = 10  # max vel along Y, max descend speed
+    playerMinVelY = -8  # min vel along Y, max ascend speed
+    playerAccY = 1  # players downward accleration
+    playerRot = 45  # player's rotation
+    playerVelRot = 3  # angular speed
+    playerRotThr = 20  # rotation threshold
+    playerFlapAcc = -9  # players speed on flapping
+    playerFlapped = False  # True when player flaps
 
     while True:
         for event in pygame.event.get():
@@ -342,7 +347,7 @@ def mainGame(movementInfo):
             lowerPipes.pop(0)
 
         # draw sprites
-        SCREEN.blit(IMAGES['background'], (0,0))
+        SCREEN.blit(IMAGES['background'], (0, 0))
 
         for uPipe, lPipe in zip(upperPipes, lowerPipes):
             SCREEN.blit(IMAGES['pipe'][0], (uPipe['x'], uPipe['y']))
@@ -351,13 +356,17 @@ def mainGame(movementInfo):
         SCREEN.blit(IMAGES['base'], (basex, BASEY))
         # print score so player overlaps the score
         showScore(score)
-        start_new_thread(send_Score, (score,))
+
+        # ToDo: Added
+        if someone_still_playing:
+            start_new_thread(send_Score, (score,))
+
         showOtherScore()
         # Player rotation has a threshold
         visibleRot = playerRotThr
         if playerRot <= playerRotThr:
             visibleRot = playerRot
-        
+
         playerSurface = pygame.transform.rotate(IMAGES['player'][playerIndex], visibleRot)
         SCREEN.blit(playerSurface, (playerx, playery))
 
@@ -367,6 +376,11 @@ def mainGame(movementInfo):
 
 def showGameOverScreen(crashInfo):
     """crashes the player down ans shows gameover image"""
+
+    # ToDo: Added
+    global someone_still_playing
+    global my_gameover
+
     score = crashInfo['score']
     playerx = SCREENWIDTH * 0.2
     playery = crashInfo['y']
@@ -385,7 +399,6 @@ def showGameOverScreen(crashInfo):
     if not crashInfo['groundCrash']:
         SOUNDS['die'].play()
 
-   
     while True:
         for event in pygame.event.get():
             if event.type == QUIT or (event.type == KEYDOWN and event.key == K_ESCAPE):
@@ -409,7 +422,7 @@ def showGameOverScreen(crashInfo):
                 playerRot -= playerVelRot
 
         # draw sprites
-        SCREEN.blit(IMAGES['background'], (0,0))
+        SCREEN.blit(IMAGES['background'], (0, 0))
 
         for uPipe, lPipe in zip(upperPipes, lowerPipes):
             SCREEN.blit(IMAGES['pipe'][0], (uPipe['x'], uPipe['y']))
@@ -417,18 +430,33 @@ def showGameOverScreen(crashInfo):
 
         SCREEN.blit(IMAGES['base'], (basex, BASEY))
         showScore(score)
-        start_new_thread(send_Score, (score,))
-        showOtherScore()
-        
 
+        #  ToDo: Added game has ended parameter
+        if someone_still_playing and not my_gameover:
+            start_new_thread(send_Score, (score, True,))
+        my_gameover = True
+        show_win_lose(score)
+
+        showOtherScore()
 
         playerSurface = pygame.transform.rotate(IMAGES['player'][1], playerRot)
-        SCREEN.blit(playerSurface, (playerx,playery))
+        SCREEN.blit(playerSurface, (playerx, playery))
         SCREEN.blit(IMAGES['gameover'], (50, 180))
 
         FPSCLOCK.tick(FPS)
         pygame.display.update()
-        #start_new_thread(close_connections, ())
+        # start_new_thread(close_connections, ())
+
+
+# ToDo: Added
+def show_win_lose(score):
+
+    if score < player2_score:
+        SCREEN.blit(IMAGES['loser'], (50, 180))
+    elif score > player2_score:
+        SCREEN.blit(IMAGES['winner'], (50, 180))
+    else:
+        SCREEN.blit(IMAGES['tie'], (50, 180))
 
 def playerShm(playerShm):
     """oscillates the value of playerShm['val'] between 8 and -8"""
@@ -436,7 +464,7 @@ def playerShm(playerShm):
         playerShm['dir'] *= -1
 
     if playerShm['dir'] == 1:
-         playerShm['val'] += 1
+        playerShm['val'] += 1
     else:
         playerShm['val'] -= 1
 
@@ -451,14 +479,14 @@ def getRandomPipe():
 
     return [
         {'x': pipeX, 'y': gapY - pipeHeight},  # upper pipe
-        {'x': pipeX, 'y': gapY + PIPEGAPSIZE}, # lower pipe
+        {'x': pipeX, 'y': gapY + PIPEGAPSIZE},  # lower pipe
     ]
 
 
 def showScore(score):
     """displays score in center of screen"""
     scoreDigits = [int(x) for x in list(str(score))]
-    totalWidth = 0 # total width of all numbers to be printed
+    totalWidth = 0  # total width of all numbers to be printed
 
     for digit in scoreDigits:
         totalWidth += IMAGES['numbers'][digit].get_width()
@@ -483,7 +511,7 @@ def showOtherScore():
     for digit in scoreDigits:
         SCREEN.blit(IMAGES['numbers'][digit], (Xoffset, SCREENHEIGHT * 0.9))
         Xoffset += IMAGES['numbers'][digit].get_width()
-        
+
 
 def checkCrash(player, upperPipes, lowerPipes):
     """returns True if player collders with base or pipes."""
@@ -497,7 +525,7 @@ def checkCrash(player, upperPipes, lowerPipes):
     else:
 
         playerRect = pygame.Rect(player['x'], player['y'],
-                      player['w'], player['h'])
+                                 player['w'], player['h'])
         pipeW = IMAGES['pipe'][0].get_width()
         pipeH = IMAGES['pipe'][0].get_height()
 
@@ -520,6 +548,7 @@ def checkCrash(player, upperPipes, lowerPipes):
 
     return [False, False]
 
+
 def pixelCollision(rect1, rect2, hitmask1, hitmask2):
     """Checks if two objects collide and not just their rects"""
     rect = rect1.clip(rect2)
@@ -532,9 +561,10 @@ def pixelCollision(rect1, rect2, hitmask1, hitmask2):
 
     for x in xrange(rect.width):
         for y in xrange(rect.height):
-            if hitmask1[x1+x][y1+y] and hitmask2[x2+x][y2+y]:
+            if hitmask1[x1 + x][y1 + y] and hitmask2[x2 + x][y2 + y]:
                 return True
     return False
+
 
 def getHitmask(image):
     """returns a hitmask using an image's alpha."""
@@ -542,109 +572,115 @@ def getHitmask(image):
     for x in xrange(image.get_width()):
         mask.append([])
         for y in xrange(image.get_height()):
-            mask[x].append(bool(image.get_at((x,y))[3]))
+            mask[x].append(bool(image.get_at((x, y))[3]))
     return mask
 
+
 def Connect_to_second_player():
-    #create a UDP socket for broadcasting
+    # create a UDP socket for broadcasting
     my_udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     my_udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     my_udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    #raise exception if it did not recieve any data
-    #my_udp_socket.setblocking(0)
-    my_udp_socket.bind(('',broadcast_port))
-    #global PORT
+    # raise exception if it did not recieve any data
+    # my_udp_socket.setblocking(0)
+    my_udp_socket.bind((HOST, broadcast_port))
+    # global PORT
     my_udp_socket.settimeout(10)
-    #broadcast message
-    msg = 'Player ' + str(ID) + ' connect with me via port ' + str(SEND_PORT)+ ' and port ' + str(RECV_PORT)
-    
+    # broadcast message
+    msg = 'Player ' + str(ID) + ' connect with me via port ' + str(SEND_PORT) + ' and port ' + str(RECV_PORT)
+
     global player2_ip, player2_send_port, player2_id, player2_recv_port
-    #my_socket.sendto(msg.encode(),('<broadcast>',8888))
+    # my_socket.sendto(msg.encode(),('<broadcast>',8888))
     global isServer
-    print('sending broadcast: ' + msg)
-    my_udp_socket.sendto(msg.encode(),('<broadcast>',broadcast_port))
-    print("trying to receive broadcast")
+
     try:
         while True:
             data, address = my_udp_socket.recvfrom(4096)
             data = str(data.decode())
-            print("data received: ", data)
-            if(int(data.split(' ')[-1])!=RECV_PORT):
-                if(data.startswith("Player")):
+            if (int(data.split(' ')[-1]) != RECV_PORT):
+                if (data.startswith("Player")):
                     isServer = False
                     player2_recv_port = int(data.split(' ')[-1])
                     player2_send_port = int(data.split(' ')[-4])
                     player2_ip = address[0]
                     player2_id = data.split(' ')[1]
                     my_udp_socket.sendto(msg.encode(), address)
-                    print('player 2 ip:' ,player2_ip, " port: ", player2_send_port)
-                    time.sleep(10)
+                    print('player 2 ip:', player2_ip, " port: ", player2_send_port)
+                    time.sleep(10 )
                     break
-          
-                
+
+
     except socket.timeout:
-        #If no data is received, you get here, but it's not an error
-        #Ignore and continue
-        print('received nothing')
+        # If no data is received, you get here, but it's not an error
+        # Ignore and continue
         isServer = True
         pass
 
+
     global send_score_socket
     global recv_score_socket
-    #create two sockets one for sending the score and one for receiving the other okayer's score
+    # create two sockets one for sending the score and one for receiving the other okayer's score
     recv_score_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     send_score_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    
+
     if isServer:
-        #listen for the other player tcp connection request
+        # listen for the other player tcp connection request
+        print('sending broadcast: ' + msg)
+        my_udp_socket.sendto(msg.encode(), ('255.255.255.255', broadcast_port))
+        print("trying to receive broadcast")
         recv_score_socket.bind((HOST, RECV_PORT))
         recv_score_socket.listen(1)
-        
-        send_score_socket.bind((HOST,SEND_PORT))
-        send_score_socket.listen(1) 
-        
+
+        send_score_socket.bind((HOST, SEND_PORT))
+        send_score_socket.listen(1)
         player2_send_conn, player2_send_addr = recv_score_socket.accept()
         player2_ip = player2_send_addr[0]
         player2_send_port = player2_send_addr[1]
         print('Connection for receiving established with ', player2_send_addr[0], ' with port = ', player2_send_port)
         recv_score_socket = player2_send_conn
-        
-       
-        player2_recv_conn, player2_recv_addr = send_score_socket.accept()
+
+                player2_recv_conn, player2_recv_addr = send_score_socket.accept()
         player2_ip = player2_recv_addr[0]
         player2_recv_port = player2_recv_addr[1]
         print('Connection for receiving established with ', player2_recv_addr[0], ' with port = ', player2_recv_port)
-        #start the sending thread
+        # start the sending thread
         send_score_socket = player2_recv_conn
-        
-    
-    else: 
-        #initiate the connection with the other player
+
+
+    else:
+        # initiate the connection with the other player
+        print(player2_ip)
         send_score_socket.connect((player2_ip, player2_recv_port))
         print("Connection for sending initiated with player : ", player2_id)
-        
+
         recv_score_socket.connect((player2_ip, player2_send_port))
         print("Connection for receiving initiated with player : ", player2_id)
-        
-        
-   
+
     start_new_thread(recv_thread, ())
-    
+
 
 def recv_thread():
-
     while get_score():
         continue
 
-def get_score():
 
+def get_score():
     global player2_score
+    global someone_still_playing
+    global my_gameover
     try:
         score = recv_score_socket.recv(1024).decode()
         if "score" in score:
             print("score received: ", score)
             player2_score = int(score.split()[-1])  # message format score: 10
             return True
+
+        # ToDo: Added
+        elif "ended" in score:
+            someone_still_playing = False
+            recv_score_socket.close()
+            print("player to has ended message received and receive socket successfully closed")
+            return False
 
     except socket.timeout:
         print("timed out")
@@ -654,13 +690,22 @@ def get_score():
         print("disconnected")
         return False
 
-
-def send_Score(score):
+#  ToDo: Added
+def send_Score(score, is_ended=False):
     global send_score_socket
+    global someone_still_playing
+    global my_gameover
     msg = "score: " + str(score)
     try:
-        send_score_socket.send(msg.encode())
-        #print("score sent")
+        if not is_ended:
+            send_score_socket.send(msg.encode())
+            # print("score sent")
+        else:
+            msg = "my game has ended score: " + str(score)
+            send_score_socket.send(msg.encode())
+            print("last message: I finished message sent")
+            send_score_socket.close()
+            print("send score socket successfully closed")
     except socket.error:
         print("send score socket disconnected")
 
@@ -668,17 +713,7 @@ def send_Score(score):
 def close_connections():
     recv_score_socket.close()
     send_score_socket.close()
-        
-    
-"""def sendScoreTCP(score):
-    score_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    score_socket.connect((player_ip, player_port))
-    msg = str(score)
-    score_socket.send(msg)"""
-    
-     
-        
+
+
 if __name__ == '__main__':
     main()
-
-
